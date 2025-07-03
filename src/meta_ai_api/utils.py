@@ -7,7 +7,13 @@ from requests_html import HTMLSession
 import requests
 from bs4 import BeautifulSoup
 
-from meta_ai_api.exceptions import FacebookInvalidCredentialsException
+try:
+    from meta_ai_api.exceptions import FacebookInvalidCredentialsException
+except ImportError:
+    try:
+        from .exceptions import FacebookInvalidCredentialsException
+    except ImportError:
+        from exceptions import FacebookInvalidCredentialsException
 
 
 def generate_offline_threading_id() -> str:
@@ -69,16 +75,17 @@ def format_response(response: dict) -> str:
     Returns:
         str: The formatted response.
     """
-    text = ""
-    for content in (
+    content_list = (
         response.get("data", {})
         .get("node", {})
         .get("bot_response_message", {})
         .get("composed_text", {})
         .get("content", [])
-    ):
-        text += content["text"] + "\n"
-    return text
+    )
+    
+    text_parts = [content["text"] for content in content_list]
+    
+    return "\n".join(text_parts)
 
 
 # Function to perform the login

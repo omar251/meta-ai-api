@@ -37,4 +37,9 @@ setuptools.setup(
         "dev": ["check-manifest"],
     },
     install_requires=["requests", "requests-html", "lxml_html_clean"],
+    entry_points={
+        "console_scripts": [
+            "meta-ai=meta_ai_api.cli:main",
+        ],
+    },
 )

@@ -15,6 +15,8 @@ Meta AI is running Llama 3 LLM.
 - **Get Sources**: Get the sources of the information provided by the AI.
 - **Streaming**: Stream the AI's response in real-time or get the final response.
 - **Follow Conversations**: Start a new conversation or follow up on an existing one.
+- **Command Line Interface**: Use Meta AI from the command line with the `meta-ai` CLI tool.
+- **Multiple Interfaces**: Choose between legacy and modern API interfaces.
 
 ## Usage
 **Download**:
@@ -64,6 +66,48 @@ print(response)
    ]
 }
 ```
+
+## Command Line Interface
+
+The package includes a powerful CLI tool for interacting with Meta AI from the command line:
+
+```bash
+# Install the package to get the CLI tool
+pip install meta-ai-api
+
+# Basic usage
+meta-ai prompt "What is the capital of France?"
+
+# Get help
+meta-ai --help
+
+# Different output formats
+meta-ai prompt "Hello" --format text
+meta-ai prompt "Hello" --format json
+meta-ai prompt "Hello" --format detailed
+
+# Streaming mode
+meta-ai prompt "Tell me a story" --stream
+
+# Interactive mode
+meta-ai interactive
+
+# Configuration management
+meta-ai config show
+meta-ai config path
+```
+
+### CLI Features
+
+- **Multiple Output Formats**: text, json, detailed
+- **Streaming Support**: Real-time response streaming
+- **Interactive Mode**: Conversational interface
+- **Configuration Management**: Save and manage credentials
+- **Proxy Support**: Use with corporate proxies
+- **Batch Processing**: Integrate into scripts and automation
+
+For detailed CLI documentation, see [CLI_USAGE.md](CLI_USAGE.md).
+
 ---
 ### Follow conversations:
 ```python
