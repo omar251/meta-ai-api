@@ -148,16 +148,26 @@ class MetaAICLI:
 
     def handle_prompt(self, args) -> None:
         """Handle the prompt command."""
-        if not args.message:
-            print("Error: Message is required for prompt command", file=sys.stderr)
-            sys.exit(1)
+        # Get message from args or stdin
+        message = args.message
+        if not message:
+            # Check if there's piped input
+            if not sys.stdin.isatty():
+                message = sys.stdin.read().strip()
+            
+            if not message:
+                print("Error: Message is required (provide as argument or pipe input)", file=sys.stderr)
+                sys.exit(1)
 
         try:
-            if args.stream:
-                self.handle_streaming_prompt(args)
+            # Default to streaming for text format
+            should_stream = args.stream or (args.format == "text" and not args.no_stream)
+            
+            if should_stream:
+                self.handle_streaming_prompt(args, message)
             else:
                 response = self.client.prompt(
-                    message=args.message,
+                    message=message,
                     new_conversation=args.new_conversation
                 )
                 
@@ -171,14 +181,14 @@ class MetaAICLI:
             print(f"Unexpected error: {e}", file=sys.stderr)
             sys.exit(1)
 
-    def handle_streaming_prompt(self, args) -> None:
+    def handle_streaming_prompt(self, args, message: str) -> None:
         """Handle streaming prompt with real-time output."""
         try:
             if args.format == "json":
                 # For JSON format, collect all chunks and output as array
                 chunks = []
                 for chunk in self.client.prompt(
-                    message=args.message,
+                    message=message,
                     stream=True,
                     new_conversation=args.new_conversation
                 ):
@@ -189,7 +199,7 @@ class MetaAICLI:
                 # For text format, show incremental updates
                 previous_text = ""
                 for chunk in self.client.prompt(
-                    message=args.message,
+                    message=message,
                     stream=True,
                     new_conversation=args.new_conversation
                 ):
@@ -205,7 +215,7 @@ class MetaAICLI:
                 # For detailed format, show final result
                 final_response = None
                 for chunk in self.client.prompt(
-                    message=args.message,
+                    message=message,
                     stream=True,
                     new_conversation=args.new_conversation
                 ):
@@ -256,7 +266,9 @@ class MetaAICLI:
                     continue
                 
                 # Regular prompt
-                if args.stream:
+                should_stream = args.stream or (args.format == "text" and not args.no_stream)
+                
+                if should_stream:
                     previous_text = ""
                     for chunk in self.client.prompt(user_input, stream=True):
                         current_text = chunk.get("message", "")
@@ -333,7 +345,9 @@ Any other input will be sent as a prompt to Meta AI.
             epilog="""
 Examples:
   meta-ai prompt "What is the capital of France?"
-  meta-ai prompt "Tell me a joke" --stream
+  echo "Tell me a joke" | meta-ai prompt
+  meta-ai prompt "Hello" --no-stream
+  meta-ai prompt "Generate code" --format detailed
   meta-ai interactive
   meta-ai prompt "Hello" --auth --format json
   meta-ai config show
@@ -370,12 +384,18 @@ Examples:
         )
         prompt_parser.add_argument(
             "message", 
-            help="The message to send to Meta AI"
+            nargs="?",
+            help="The message to send to Meta AI (or pipe input via stdin)"
         )
         prompt_parser.add_argument(
             "--stream", 
             action="store_true", 
-            help="Stream the response in real-time"
+            help="Force streaming mode (text format streams by default)"
+        )
+        prompt_parser.add_argument(
+            "--no-stream", 
+            action="store_true", 
+            help="Disable streaming mode"
         )
         prompt_parser.add_argument(
             "--new-conversation", 
@@ -390,8 +410,8 @@ Examples:
         prompt_parser.add_argument(
             "--format", 
             choices=["text", "json", "detailed"], 
-            default="detailed",
-            help="Output format (default: detailed)"
+            default="text",
+            help="Output format (default: text)"
         )
 
         # Interactive command
@@ -402,7 +422,12 @@ Examples:
         interactive_parser.add_argument(
             "--stream", 
             action="store_true", 
-            help="Use streaming mode for responses"
+            help="Force streaming mode for responses (text format streams by default)"
+        )
+        interactive_parser.add_argument(
+            "--no-stream", 
+            action="store_true", 
+            help="Disable streaming mode for responses"
         )
         interactive_parser.add_argument(
             "--auth", 
@@ -412,8 +437,8 @@ Examples:
         interactive_parser.add_argument(
             "--format", 
             choices=["text", "json", "detailed"], 
-            default="detailed",
-            help="Output format for responses (default: detailed)"
+            default="text",
+            help="Output format for responses (default: text)"
         )
 
         # Config command
