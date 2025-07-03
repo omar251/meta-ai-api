@@ -11,6 +11,7 @@ import json
 import sys
 import os
 import warnings
+import time
 from typing import Optional, Dict, Any
 import getpass
 from pathlib import Path
@@ -177,16 +178,27 @@ class MetaAICLI:
             # Default to streaming for text format
             should_stream = args.stream or (args.format == "text" and not args.no_stream)
             
+            # Start timing
+            start_time = time.time()
+            
             if should_stream:
-                self.handle_streaming_prompt(args, message)
+                self.handle_streaming_prompt(args, message, start_time)
             else:
                 response = self.client.prompt(
                     message=message,
                     new_conversation=args.new_conversation
                 )
                 
+                # Calculate timing
+                end_time = time.time()
+                elapsed_time = end_time - start_time
+                
                 output = self.format_output(response, args.format)
                 print(output)
+                
+                # Show timing if requested
+                if args.timing:
+                    print(f"\n⏱️  Response time: {elapsed_time:.2f} seconds", file=sys.stderr)
                 
         except MetaAIException as e:
             print(f"Meta AI Error: {e}", file=sys.stderr)
@@ -195,9 +207,12 @@ class MetaAICLI:
             print(f"Unexpected error: {e}", file=sys.stderr)
             sys.exit(1)
 
-    def handle_streaming_prompt(self, args, message: str) -> None:
+    def handle_streaming_prompt(self, args, message: str, start_time: float) -> None:
         """Handle streaming prompt with real-time output."""
         try:
+            first_chunk_time = None
+            final_response = None
+            
             if args.format == "json":
                 # For JSON format, collect all chunks and output as array
                 chunks = []
@@ -206,7 +221,10 @@ class MetaAICLI:
                     stream=True,
                     new_conversation=args.new_conversation
                 ):
+                    if first_chunk_time is None:
+                        first_chunk_time = time.time()
                     chunks.append(chunk)
+                    final_response = chunk
                 print(json.dumps(chunks, indent=2, ensure_ascii=False))
             
             elif args.format == "text":
@@ -217,27 +235,40 @@ class MetaAICLI:
                     stream=True,
                     new_conversation=args.new_conversation
                 ):
+                    if first_chunk_time is None:
+                        first_chunk_time = time.time()
                     current_text = chunk.get("message", "")
                     if current_text and current_text != previous_text:
                         new_part = current_text[len(previous_text):]
                         if new_part.strip():
                             print(new_part, end="", flush=True)
                         previous_text = current_text
+                    final_response = chunk
                 print()  # Final newline
             
             else:
                 # For detailed format, show final result
-                final_response = None
                 for chunk in self.client.prompt(
                     message=message,
                     stream=True,
                     new_conversation=args.new_conversation
                 ):
+                    if first_chunk_time is None:
+                        first_chunk_time = time.time()
                     final_response = chunk
                 
                 if final_response:
                     output = self.format_output(final_response, args.format)
                     print(output)
+            
+            # Show timing if requested
+            if args.timing and first_chunk_time is not None:
+                end_time = time.time()
+                total_time = end_time - start_time
+                first_chunk_time_elapsed = first_chunk_time - start_time
+                
+                print(f"\n⏱️  Time to first response: {first_chunk_time_elapsed:.2f}s", file=sys.stderr)
+                print(f"⏱️  Total response time: {total_time:.2f}s", file=sys.stderr)
                     
         except KeyboardInterrupt:
             print("\nStreaming interrupted by user", file=sys.stderr)
@@ -281,10 +312,14 @@ class MetaAICLI:
                 
                 # Regular prompt
                 should_stream = args.stream or (args.format == "text" and not args.no_stream)
+                start_time = time.time()
                 
                 if should_stream:
                     previous_text = ""
+                    first_chunk_time = None
                     for chunk in self.client.prompt(user_input, stream=True):
+                        if first_chunk_time is None:
+                            first_chunk_time = time.time()
                         current_text = chunk.get("message", "")
                         if current_text and current_text != previous_text:
                             new_part = current_text[len(previous_text):]
@@ -292,10 +327,25 @@ class MetaAICLI:
                                 print(new_part, end="", flush=True)
                             previous_text = current_text
                     print("\n")
+                    
+                    # Show timing for streaming in interactive mode
+                    if args.timing and first_chunk_time is not None:
+                        end_time = time.time()
+                        total_time = end_time - start_time
+                        first_chunk_time_elapsed = first_chunk_time - start_time
+                        print(f"⏱️  Time to first response: {first_chunk_time_elapsed:.2f}s", file=sys.stderr)
+                        print(f"⏱️  Total response time: {total_time:.2f}s", file=sys.stderr)
                 else:
                     response = self.client.prompt(user_input)
+                    end_time = time.time()
+                    elapsed_time = end_time - start_time
+                    
                     output = self.format_output(response, args.format)
                     print(output)
+                    
+                    # Show timing for non-streaming in interactive mode
+                    if args.timing:
+                        print(f"⏱️  Response time: {elapsed_time:.2f} seconds", file=sys.stderr)
                     print()
                 
             except KeyboardInterrupt:
@@ -362,9 +412,9 @@ Examples:
   echo "Tell me a joke" | meta-ai prompt
   cat file.txt | meta-ai prompt "summarize this"
   echo "def hello():" | meta-ai prompt "explain this code"
-  meta-ai prompt "Hello" --no-stream
-  meta-ai prompt "Generate code" --format detailed
-  meta-ai interactive
+  meta-ai prompt "Hello" --no-stream --timing
+  meta-ai prompt "Generate code" --format detailed --timing
+  meta-ai interactive --timing
   meta-ai prompt "Hello" --auth --format json
   meta-ai config show
             """
@@ -429,6 +479,11 @@ Examples:
             default="text",
             help="Output format (default: text)"
         )
+        prompt_parser.add_argument(
+            "--timing", 
+            action="store_true", 
+            help="Show response time information"
+        )
 
         # Interactive command
         interactive_parser = subparsers.add_parser(
@@ -455,6 +510,11 @@ Examples:
             choices=["text", "json", "detailed"], 
             default="text",
             help="Output format for responses (default: text)"
+        )
+        interactive_parser.add_argument(
+            "--timing", 
+            action="store_true", 
+            help="Show response time information"
         )
 
         # Config command
