@@ -9,8 +9,8 @@ META_AI_GRAPH_URL = "https://graph.meta.ai/graphql?locale=user"
 
 # Request Configuration
 MAX_RETRIES = 3
-RETRY_DELAY = 3  # seconds
-TOKEN_DELAY = 1  # seconds after getting access token
+RETRY_DELAY = 1  # seconds (reduced from 3)
+TOKEN_DELAY = 0.5  # seconds after getting access token (reduced from 1)
 
 # User Agent
 DEFAULT_USER_AGENT = (
