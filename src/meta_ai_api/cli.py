@@ -148,16 +148,30 @@ class MetaAICLI:
 
     def handle_prompt(self, args) -> None:
         """Handle the prompt command."""
-        # Get message from args or stdin
-        message = args.message
-        if not message:
-            # Check if there's piped input
-            if not sys.stdin.isatty():
-                message = sys.stdin.read().strip()
-            
-            if not message:
-                print("Error: Message is required (provide as argument or pipe input)", file=sys.stderr)
-                sys.exit(1)
+        # Get message from args and/or stdin
+        message_parts = []
+        
+        # Check for piped input first
+        piped_input = ""
+        if not sys.stdin.isatty():
+            piped_input = sys.stdin.read().strip()
+            if piped_input:
+                message_parts.append(piped_input)
+        
+        # Add the prompt argument if provided
+        if args.message:
+            message_parts.append(args.message)
+        
+        # Combine the parts
+        if not message_parts:
+            print("Error: Message is required (provide as argument or pipe input)", file=sys.stderr)
+            sys.exit(1)
+        
+        # Join with a newline if we have both piped input and a prompt
+        if len(message_parts) == 2:
+            message = f"{message_parts[0]}\n\n{message_parts[1]}"
+        else:
+            message = message_parts[0]
 
         try:
             # Default to streaming for text format
@@ -346,6 +360,8 @@ Any other input will be sent as a prompt to Meta AI.
 Examples:
   meta-ai prompt "What is the capital of France?"
   echo "Tell me a joke" | meta-ai prompt
+  cat file.txt | meta-ai prompt "summarize this"
+  echo "def hello():" | meta-ai prompt "explain this code"
   meta-ai prompt "Hello" --no-stream
   meta-ai prompt "Generate code" --format detailed
   meta-ai interactive
@@ -385,7 +401,7 @@ Examples:
         prompt_parser.add_argument(
             "message", 
             nargs="?",
-            help="The message to send to Meta AI (or pipe input via stdin)"
+            help="The message/prompt to send to Meta AI (can be combined with piped input)"
         )
         prompt_parser.add_argument(
             "--stream", 
