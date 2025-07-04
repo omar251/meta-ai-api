@@ -12,6 +12,7 @@ dependencies = [
     "edge-tts>=7.0.2",
     "pygame>=2.6.1",
     "googletrans==4.0.0rc1",
+    "colorama>=0.4.6",
 ]
 
 [project.scripts]

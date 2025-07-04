@@ -17,6 +17,8 @@ import subprocess
 import shutil
 import asyncio
 import threading
+import colorama
+from colorama import Fore, Back, Style, init
 from typing import Optional, Dict, Any
 import getpass
 from pathlib import Path
@@ -51,6 +53,8 @@ class MetaAICLI:
         self._last_response = None  # Store last response for on-demand TTS
         self._voices_cache = None  # Cache for available voices
         self._language_voices = {}  # Cache voices by language
+        # Initialize colorama for cross-platform colors
+        init(autoreset=True)
 
     def load_config(self) -> Dict[str, Any]:
         """Load configuration from file."""
@@ -296,7 +300,7 @@ class MetaAICLI:
                 first_chunk_time_elapsed = first_chunk_time - start_time
 
                 print(f"\n⏱️  Time to first response: {first_chunk_time_elapsed:.2f}s", file=sys.stderr)
-                print(f"⏱️  Total response time: {total_time:.2f}s", file=sys.stderr)
+                self.colored_print(f"⏱️  Total response time: {total_time:.2f}s", "bright_yellow")
 
         except KeyboardInterrupt:
             print("\nStreaming interrupted by user", file=sys.stderr)
@@ -304,25 +308,25 @@ class MetaAICLI:
 
     def handle_interactive(self, args) -> None:
         """Handle interactive mode."""
-        print("Meta AI Interactive Mode")
-        print("Type 'help' for commands, 'quit' to exit")
-        print("-" * 40)
+        self.colored_print("🤖 Meta AI Interactive Mode", "bright_cyan", "bold")
+        self.colored_print("💡 Type 'help' for commands, 'quit' to exit", "yellow")
+        self.colored_print("─" * 50, "cyan")
 
         if self.client.is_authenticated:
-            print("✓ Authenticated with Facebook")
+            self.colored_print("✅ Authenticated with Facebook", "bright_green")
         else:
             print("ℹ Using anonymous mode")
         print()
 
         while True:
             try:
-                user_input = input("meta-ai> ").strip()
+                user_input = input(f"{Fore.LIGHTCYAN_EX}meta-ai{Fore.LIGHTWHITE_EX}> {Style.RESET_ALL}").strip()
 
                 if not user_input:
                     continue
 
                 if user_input.lower() in ['quit', 'exit', 'q']:
-                    print("Goodbye!")
+                    self.colored_print("👋 Goodbye!", "bright_magenta", "bold")
                     break
 
                 elif user_input.lower() == 'help':
@@ -331,7 +335,7 @@ class MetaAICLI:
 
                 elif user_input.lower() == 'new':
                     self.client.start_new_conversation()
-                    print("✓ Started new conversation")
+                    self.colored_print("✅ Started new conversation", "bright_green")
                     continue
 
                 elif user_input.lower() == 'status':
@@ -375,8 +379,8 @@ class MetaAICLI:
                         end_time = time.time()
                         total_time = end_time - start_time
                         first_chunk_time_elapsed = first_chunk_time - start_time
-                        print(f"⏱️  Time to first response: {first_chunk_time_elapsed:.2f}s", file=sys.stderr)
-                        print(f"⏱️  Total response time: {total_time:.2f}s", file=sys.stderr)
+                        self.colored_print(f"⏱️  Time to first response: {first_chunk_time_elapsed:.2f}s", "bright_yellow")
+                        self.colored_print(f"⏱️  Total response time: {total_time:.2f}s", "bright_yellow")
                 else:
                     response = self.client.prompt(user_input)
                     end_time = time.time()
@@ -393,34 +397,31 @@ class MetaAICLI:
 
                     # Show timing for non-streaming in interactive mode
                     if args.timing:
-                        print(f"⏱️  Response time: {elapsed_time:.2f} seconds", file=sys.stderr)
+                        self.colored_print(f"⏱️  Response time: {elapsed_time:.2f} seconds", "bright_yellow")
                     print()
 
             except KeyboardInterrupt:
-                print("\nUse 'quit' to exit")
+                self.colored_print("\n⚠️  Use 'quit' to exit", "yellow")
             except EOFError:
-                print("\nGoodbye!")
+                self.colored_print("\n👋 Goodbye!", "bright_magenta", "bold")
                 break
             except Exception as e:
                 print(f"Error: {e}", file=sys.stderr)
 
     def show_interactive_help(self) -> None:
         """Show help for interactive mode."""
-        help_text = """
-Interactive Mode Commands:
-  help     - Show this help message
-  new      - Start a new conversation
-  status   - Show client status
-  tts      - Toggle TTS on/off
-  tts on   - Enable TTS
-  tts off  - Disable TTS
-  tts voice <voice> - Set edge-tts voice (e.g., en-US-JennyNeural)
-  speak    - Speak the last response again
-  quit     - Exit interactive mode
-
-Any other input will be sent as a prompt to Meta AI.
-        """
-        print(help_text.strip())
+        self.colored_print("Interactive Mode Commands:", "bright_yellow", "bold")
+        self.colored_print("  help     - Show this help message", "bright_green")
+        self.colored_print("  new      - Start a new conversation", "bright_green")
+        self.colored_print("  status   - Show client status", "bright_green")
+        self.colored_print("  tts      - Toggle TTS on/off", "bright_green")
+        self.colored_print("  tts on   - Enable TTS", "bright_green")
+        self.colored_print("  tts off  - Disable TTS", "bright_green")
+        self.colored_print("  tts voice <voice> - Set edge-tts voice", "bright_green")
+        self.colored_print("  speak    - Speak the last response again", "bright_green")
+        self.colored_print("  quit     - Exit interactive mode", "bright_red")
+        self.colored_print("", "white")
+        self.colored_print("Any other input will be sent as a prompt to Meta AI.", "bright_blue")
 
     def handle_tts_command(self, user_input: str) -> None:
         """Handle TTS-related commands in interactive mode."""
@@ -430,7 +431,7 @@ Any other input will be sent as a prompt to Meta AI.
             # Toggle TTS
             if self.tts_enabled:
                 self.tts_enabled = False
-                print("✓ TTS disabled")
+                self.colored_print("🔇 TTS disabled", "yellow")
             else:
                 if self.tts_command or self.tts_method == "edge-tts":
                     self.tts_enabled = True
@@ -456,7 +457,7 @@ Any other input will be sent as a prompt to Meta AI.
 
             elif parts[1].lower() == "off":
                 self.tts_enabled = False
-                print("✓ TTS disabled")
+                self.colored_print("🔇 TTS disabled", "yellow")
 
             else:
                 print("Usage: tts [on|off|voice <voice_name>]")
@@ -688,18 +689,22 @@ Any other input will be sent as a prompt to Meta AI.
 
     def show_status(self) -> None:
         """Show current client status."""
-        print("Client Status:")
-        print(f"  Authenticated: {self.client.is_authenticated}")
-        print(f"  Conversation ID: {self.client.conversation_id or 'None'}")
-        print(f"  TTS Enabled: {self.tts_enabled}")
+        self.colored_print("📊 Client Status:", "bright_cyan", "bold")
+        auth_color = "bright_green" if self.client.is_authenticated else "yellow"
+        self.colored_print(f"  🔐 Authenticated: {self.client.is_authenticated}", auth_color)
+        conv_id = self.client.conversation_id or "None"
+        self.colored_print(f"  💬 Conversation ID: {conv_id}", "white")
+        tts_color = "bright_green" if self.tts_enabled else "red"
+        self.colored_print(f"  🔊 TTS Enabled: {self.tts_enabled}", tts_color)
         if self.tts_enabled:
-            print(f"  TTS Method: {self.tts_method}")
+            self.colored_print(f"  🎭 TTS Method: {self.tts_method}", "cyan")
             if self.tts_method == "edge-tts":
-                print(f"  TTS Voice: {self.edge_tts_voice}")
+                self.colored_print(f"  🎤 TTS Voice: {self.edge_tts_voice}", "magenta")
             elif self.tts_method == "command":
-                print(f"  TTS Command: {self.tts_command}")
-        print(f"  Config file: {self.config_file}")
-        print(f"  Config exists: {self.config_file.exists()}")
+                self.colored_print(f"  ⚙️  TTS Command: {self.tts_command}", "magenta")
+        config_color = "bright_green" if self.config_file.exists() else "yellow"
+        self.colored_print(f"  📁 Config file: {self.config_file}", "white")
+        self.colored_print(f"  📄 Config exists: {self.config_file.exists()}", config_color)
 
     def handle_config(self, args) -> None:
         """Handle configuration commands."""
@@ -906,6 +911,29 @@ Examples:
             parser.print_help()
 
 
+    def colored_print(self, text: str, color: str = "", style: str = "") -> None:
+        """Print colored text with optional style."""
+        color_map = {
+            "red": Fore.RED, "green": Fore.GREEN, "blue": Fore.BLUE,
+            "yellow": Fore.YELLOW, "magenta": Fore.MAGENTA, "cyan": Fore.CYAN,
+            "white": Fore.WHITE, "bright_red": Fore.LIGHTRED_EX,
+            "bright_green": Fore.LIGHTGREEN_EX, "bright_blue": Fore.LIGHTBLUE_EX,
+            "bright_yellow": Fore.LIGHTYELLOW_EX, "bright_magenta": Fore.LIGHTMAGENTA_EX,
+            "bright_cyan": Fore.LIGHTCYAN_EX
+        }
+        style_map = {"bold": Style.BRIGHT, "dim": Style.DIM}
+        
+        color_code = color_map.get(color, "")
+        style_code = style_map.get(style, "")
+        print(f"{style_code}{color_code}{text}{Style.RESET_ALL}")
+
+    def print_banner(self, text: str, char: str = "=", color: str = "cyan") -> None:
+        """Print a colored banner."""
+        banner = char * len(text)
+        self.colored_print(banner, color, "bold")
+        self.colored_print(text, color, "bold")
+        self.colored_print(banner, color, "bold")
+
     def detect_language(self, text: str) -> str:
         """Detect the language of the text using googletrans."""
         try:
@@ -965,6 +993,29 @@ def main():
     except Exception as e:
         print(f"Unexpected error: {e}", file=sys.stderr)
         sys.exit(1)
+    def colored_print(self, text: str, color: str = "", style: str = "") -> None:
+        """Print colored text with optional style."""
+        color_map = {
+            "red": Fore.RED, "green": Fore.GREEN, "blue": Fore.BLUE,
+            "yellow": Fore.YELLOW, "magenta": Fore.MAGENTA, "cyan": Fore.CYAN,
+            "white": Fore.WHITE, "bright_red": Fore.LIGHTRED_EX,
+            "bright_green": Fore.LIGHTGREEN_EX, "bright_blue": Fore.LIGHTBLUE_EX,
+            "bright_yellow": Fore.LIGHTYELLOW_EX, "bright_magenta": Fore.LIGHTMAGENTA_EX,
+            "bright_cyan": Fore.LIGHTCYAN_EX
+        }
+        style_map = {"bold": Style.BRIGHT, "dim": Style.DIM}
+        
+        color_code = color_map.get(color, "")
+        style_code = style_map.get(style, "")
+        print(f"{style_code}{color_code}{text}{Style.RESET_ALL}")
+
+    def print_banner(self, text: str, char: str = "=", color: str = "cyan") -> None:
+        """Print a colored banner."""
+        banner = char * len(text)
+        self.colored_print(banner, color, "bold")
+        self.colored_print(text, color, "bold")
+        self.colored_print(banner, color, "bold")
+
     def detect_language(self, text: str) -> str:
         """Detect the language of the text using googletrans."""
         try:
@@ -997,7 +1048,7 @@ def main():
             
             # Cache all voices if not already cached
             if self._voices_cache is None:
-                print("🔄 Caching available voices...", file=sys.stderr)
+                self.colored_print("🔄 Caching available voices...", "bright_blue")
                 self._voices_cache = await edge_tts.list_voices()
                 
                 # Group voices by language
@@ -1007,7 +1058,7 @@ def main():
                         self._language_voices[lang] = []
                     self._language_voices[lang].append(voice)
                 
-                print(f"✓ Cached {len(self._voices_cache)} voices for {len(self._language_voices)} languages", file=sys.stderr)
+                self.colored_print(f"✅ Cached {len(self._voices_cache)} voices for {len(self._language_voices)} languages", "bright_green")
             
             # Return voices for the requested language, fallback to en-US
             voices = self._language_voices.get(language, self._language_voices.get("en-US", []))
@@ -1040,10 +1091,10 @@ def main():
                     voice_name = selected_voice["ShortName"]
                     friendly_name = selected_voice.get("FriendlyName", voice_name)
                     
-                    print(f"🎭 Using {friendly_name} for {detected_lang}", file=sys.stderr)
+                    self.colored_print(f"🎭 Using {friendly_name} for {detected_lang}", "bright_magenta")
                     return voice_name
                 else:
-                    print(f"⚠ No voices found for {detected_lang}, using default", file=sys.stderr)
+                    self.colored_print(f"⚠️  No voices found for {detected_lang}, using default", "yellow")
                     return self.edge_tts_voice
             
             # Run async function
