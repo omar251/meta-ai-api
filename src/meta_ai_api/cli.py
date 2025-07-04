@@ -49,6 +49,8 @@ class MetaAICLI:
         self._mixer_lock = threading.Lock()
         self._mixer_initialized = False
         self._last_response = None  # Store last response for on-demand TTS
+        self._voices_cache = None  # Cache for available voices
+        self._language_voices = {}  # Cache voices by language
 
     def load_config(self) -> Dict[str, Any]:
         """Load configuration from file."""
@@ -482,13 +484,13 @@ Any other input will be sent as a prompt to Meta AI.
                 import edge_tts
                 temp_enabled = True
             except ImportError:
-                print("TTS not available. Install edge-tts with: pip install edge-tts pygame")
+                print("TTS not available. Install edge-tts with: pip install edge-tts pygame googletrans==4.0.0rc1")
                 return
 
             if temp_enabled:
                 print("🔊 Speaking last response...")
                 # Use edge-tts method directly without changing global state
-                self.speak_with_edge_tts(self.clean_text_for_tts(self._last_response))
+                self.speak_with_edge_tts(self.clean_text_for_tts(self._last_response), self.select_random_voice(self._last_response))
         else:
             print("🔊 Speaking last response...")
             self.speak_text(self._last_response)
@@ -538,18 +540,20 @@ Any other input will be sent as a prompt to Meta AI.
         """Convert text to speech using the configured TTS method."""
         if not self.tts_enabled:
             return
-
+        
         try:
             # Clean the text for TTS (remove markdown, etc.)
             clean_text = self.clean_text_for_tts(text)
             if not clean_text.strip():
                 return
-
+            
             if self.tts_method == "edge-tts":
-                self.speak_with_edge_tts(clean_text)
+                # Select random voice based on language
+                selected_voice = self.select_random_voice(clean_text)
+                self.speak_with_edge_tts(clean_text, selected_voice)
             elif self.tts_method == "command" and self.tts_command:
                 self.speak_with_command(clean_text)
-
+                
         except Exception as e:
             print(f"TTS Error: {e}", file=sys.stderr)
 
@@ -579,7 +583,7 @@ Any other input will be sent as a prompt to Meta AI.
                     return False
             return True
 
-    def speak_with_edge_tts(self, text: str) -> None:
+    def speak_with_edge_tts(self, text: str, voice: str = None) -> None:
         """Speak text using edge-tts with pygame in a background thread."""
         def _speak_in_background():
             temp_path = None
@@ -594,7 +598,7 @@ Any other input will be sent as a prompt to Meta AI.
 
                 # Generate speech asynchronously
                 async def generate_speech():
-                    communicate = edge_tts.Communicate(text, self.edge_tts_voice)
+                    communicate = edge_tts.Communicate(text, voice or self.edge_tts_voice)
                     await communicate.save(temp_path)
 
                 # Run the async function
@@ -902,6 +906,54 @@ Examples:
             parser.print_help()
 
 
+    def detect_language(self, text: str) -> str:
+        """Detect the language of the text using googletrans."""
+        try:
+            from googletrans import Translator
+            translator = Translator()
+            detected = translator.detect(text)
+            lang_code = detected.lang
+            language_map = {
+                "en": "en-US", "es": "es-ES", "fr": "fr-FR", "de": "de-DE",
+                "it": "it-IT", "pt": "pt-BR", "ru": "ru-RU", "ja": "ja-JP",
+                "ko": "ko-KR", "zh": "zh-CN", "ar": "ar-SA", "hi": "hi-IN"
+            }
+            return language_map.get(lang_code, "en-US")
+        except Exception:
+            return "en-US"
+
+    async def get_voices_for_language(self, language: str) -> list:
+        """Get available voices for a specific language."""
+        try:
+            import edge_tts
+            if self._voices_cache is None:
+                self._voices_cache = await edge_tts.list_voices()
+                for voice in self._voices_cache:
+                    lang = voice["Locale"]
+                    if lang not in self._language_voices:
+                        self._language_voices[lang] = []
+                    self._language_voices[lang].append(voice)
+            return self._language_voices.get(language, self._language_voices.get("en-US", []))
+        except Exception:
+            return []
+
+    def select_random_voice(self, text: str) -> str:
+        """Select a random voice based on detected language."""
+        try:
+            import asyncio, random
+            detected_lang = self.detect_language(text)
+            async def get_voice():
+                voices = await self.get_voices_for_language(detected_lang)
+                if voices:
+                    neural_voices = [v for v in voices if "Neural" in v.get("VoiceTag", "")]
+                    if neural_voices: voices = neural_voices
+                    selected = random.choice(voices)
+                    return selected["ShortName"]
+                return self.edge_tts_voice
+            return asyncio.run(get_voice())
+        except Exception:
+            return self.edge_tts_voice
+
 def main():
     """Main entry point for the CLI."""
     cli = MetaAICLI()
@@ -913,6 +965,98 @@ def main():
     except Exception as e:
         print(f"Unexpected error: {e}", file=sys.stderr)
         sys.exit(1)
+    def detect_language(self, text: str) -> str:
+        """Detect the language of the text using googletrans."""
+        try:
+            from googletrans import Translator
+            translator = Translator()
+            detected = translator.detect(text)
+            lang_code = detected.lang
+            
+            # Map googletrans language codes to edge-tts compatible ones
+            language_map = {
+                "en": "en-US", "es": "es-ES", "fr": "fr-FR", "de": "de-DE",
+                "it": "it-IT", "pt": "pt-BR", "ru": "ru-RU", "ja": "ja-JP",
+                "ko": "ko-KR", "zh": "zh-CN", "zh-cn": "zh-CN", "ar": "ar-SA",
+                "hi": "hi-IN", "nl": "nl-NL", "sv": "sv-SE", "da": "da-DK",
+                "no": "nb-NO", "fi": "fi-FI", "pl": "pl-PL", "tr": "tr-TR",
+                "th": "th-TH", "vi": "vi-VN", "ca": "ca-ES", "cs": "cs-CZ",
+                "el": "el-GR", "he": "he-IL", "hu": "hu-HU", "id": "id-ID",
+                "ms": "ms-MY", "ro": "ro-RO", "sk": "sk-SK", "sl": "sl-SI",
+                "uk": "uk-UA"
+            }
+            return language_map.get(lang_code, "en-US")
+        except Exception as e:
+            print(f"TTS Warning: Language detection failed, using English: {e}", file=sys.stderr)
+            return "en-US"
+
+    async def get_voices_for_language(self, language: str) -> list:
+        """Get available voices for a specific language."""
+        try:
+            import edge_tts
+            
+            # Cache all voices if not already cached
+            if self._voices_cache is None:
+                print("🔄 Caching available voices...", file=sys.stderr)
+                self._voices_cache = await edge_tts.list_voices()
+                
+                # Group voices by language
+                for voice in self._voices_cache:
+                    lang = voice["Locale"]
+                    if lang not in self._language_voices:
+                        self._language_voices[lang] = []
+                    self._language_voices[lang].append(voice)
+                
+                print(f"✓ Cached {len(self._voices_cache)} voices for {len(self._language_voices)} languages", file=sys.stderr)
+            
+            # Return voices for the requested language, fallback to en-US
+            voices = self._language_voices.get(language, self._language_voices.get("en-US", []))
+            return voices
+            
+        except Exception as e:
+            print(f"TTS Warning: Could not get voices: {e}", file=sys.stderr)
+            return []
+
+    def select_random_voice(self, text: str) -> str:
+        """Select a random voice based on detected language."""
+        try:
+            import asyncio
+            import random
+            
+            # Detect language
+            detected_lang = self.detect_language(text)
+            
+            # Get voices for the language
+            async def get_voice():
+                voices = await self.get_voices_for_language(detected_lang)
+                if voices:
+                    # Filter for Neural voices (higher quality)
+                    neural_voices = [v for v in voices if "Neural" in v.get("VoiceTag", "")]
+                    if neural_voices:
+                        voices = neural_voices
+                    
+                    # Select random voice
+                    selected_voice = random.choice(voices)
+                    voice_name = selected_voice["ShortName"]
+                    friendly_name = selected_voice.get("FriendlyName", voice_name)
+                    
+                    print(f"🎭 Using {friendly_name} for {detected_lang}", file=sys.stderr)
+                    return voice_name
+                else:
+                    print(f"⚠ No voices found for {detected_lang}, using default", file=sys.stderr)
+                    return self.edge_tts_voice
+            
+            # Run async function
+            return asyncio.run(get_voice())
+            
+        except Exception as e:
+            print(f"TTS Warning: Voice selection failed, using default: {e}", file=sys.stderr)
+            return self.edge_tts_voice
+
+
+
+if __name__ == "__main__":
+    main()
 
 
 if __name__ == "__main__":
