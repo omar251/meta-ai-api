@@ -618,17 +618,10 @@ Any other input will be sent as a prompt to Meta AI.
                         return
 
                 # Wait for playback to finish (outside the lock so other operations can proceed)
-                timeout_counter = 0
-                max_timeout = 300  # 30 seconds max
 
-                while pygame.mixer.music.get_busy() and timeout_counter < max_timeout:
+                while pygame.mixer.music.get_busy():
                     pygame.time.wait(100)
-                    timeout_counter += 1
 
-                # Stop if still playing (timeout protection)
-                if pygame.mixer.music.get_busy():
-                    with self._mixer_lock:
-                        pygame.mixer.music.stop()
 
             except ImportError as e:
                 missing_pkg = "edge-tts" if "edge_tts" in str(e) else "pygame"
