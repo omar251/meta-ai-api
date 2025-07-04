@@ -15,6 +15,7 @@ import time
 import subprocess
 import shutil
 import asyncio
+import threading
 from typing import Optional, Dict, Any
 import getpass
 from pathlib import Path
@@ -516,42 +517,84 @@ Any other input will be sent as a prompt to Meta AI.
             print(f"TTS Error: {e}", file=sys.stderr)
 
     def speak_with_edge_tts(self, text: str) -> None:
-        """Speak text using edge-tts."""
+        """Speak text using edge-tts with pygame in a background thread."""
+        def _speak_in_background():
+            temp_path = None
+            mixer_initialized = False
+            try:
+                import edge_tts
+                import pygame
+                import tempfile
+                import os
+                
+                # Create a temporary file for the audio
+                with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as temp_file:
+                    temp_path = temp_file.name
+                
+                # Generate speech asynchronously
+                async def generate_speech():
+                    communicate = edge_tts.Communicate(text, self.edge_tts_voice)
+                    await communicate.save(temp_path)
+                
+                # Run the async function
+                asyncio.run(generate_speech())
+                
+                # Initialize pygame mixer safely for threading
+                os.environ['SDL_AUDIODRIVER'] = 'pulse,alsa,oss'  # Prefer stable drivers
+                
+                # Initialize mixer with conservative settings
+                pygame.mixer.pre_init(
+                    frequency=22050,    # Lower frequency for stability
+                    size=-16,           # 16-bit signed
+                    channels=2,         # Stereo
+                    buffer=1024         # Larger buffer for stability
+                )
+                pygame.mixer.init()
+                mixer_initialized = True
+                
+                # Load and play the audio
+                pygame.mixer.music.load(temp_path)
+                pygame.mixer.music.play()
+                
+                # Wait for playback to finish with timeout protection
+                timeout_counter = 0
+                max_timeout = 300  # 30 seconds max (300 * 0.1s)
+                
+                while pygame.mixer.music.get_busy() and timeout_counter < max_timeout:
+                    pygame.time.wait(100)
+                    timeout_counter += 1
+                
+                # Stop music if still playing (timeout protection)
+                if pygame.mixer.music.get_busy():
+                    pygame.mixer.music.stop()
+                
+            except ImportError as e:
+                missing_pkg = "edge-tts" if "edge_tts" in str(e) else "pygame"
+                print(f"TTS Error: {missing_pkg} not installed. Install with: pip install {missing_pkg}", file=sys.stderr)
+            except Exception as e:
+                print(f"Edge-TTS Error: {e}", file=sys.stderr)
+            finally:
+                # Safe cleanup
+                try:
+                    if mixer_initialized:
+                        pygame.mixer.music.stop()
+                        pygame.mixer.quit()
+                except:
+                    pass  # Ignore cleanup errors
+                
+                # Clean up temp file
+                if temp_path and os.path.exists(temp_path):
+                    try:
+                        os.unlink(temp_path)
+                    except:
+                        pass  # Ignore cleanup errors
+        
+        # Run TTS in a background thread so it doesn't block the main thread
         try:
-            import edge_tts
-            import tempfile
-            import pygame
-            
-            # Create a temporary file for the audio
-            with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as temp_file:
-                temp_path = temp_file.name
-            
-            # Generate speech asynchronously
-            async def generate_speech():
-                communicate = edge_tts.Communicate(text, self.edge_tts_voice)
-                await communicate.save(temp_path)
-            
-            # Run the async function
-            asyncio.run(generate_speech())
-            
-            # Play the audio using pygame
-            pygame.mixer.init()
-            pygame.mixer.music.load(temp_path)
-            pygame.mixer.music.play()
-            
-            # Wait for playback to finish
-            while pygame.mixer.music.get_busy():
-                pygame.time.wait(100)
-            
-            # Clean up
-            pygame.mixer.quit()
-            os.unlink(temp_path)
-            
-        except ImportError as e:
-            missing_pkg = "edge-tts" if "edge_tts" in str(e) else "pygame"
-            print(f"TTS Error: {missing_pkg} not installed. Install with: pip install {missing_pkg}", file=sys.stderr)
+            tts_thread = threading.Thread(target=_speak_in_background, daemon=True)
+            tts_thread.start()
         except Exception as e:
-            print(f"Edge-TTS Error: {e}", file=sys.stderr)
+            print(f"TTS Error: {e}", file=sys.stderr)
 
     def speak_with_command(self, text: str) -> None:
         """Speak text using external command."""
