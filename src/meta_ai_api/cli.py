@@ -47,6 +47,7 @@ class MetaAICLI:
         self.edge_tts_voice = "en-US-AriaNeural"  # Default voice
         self._mixer_lock = threading.Lock()
         self._mixer_initialized = False
+        self._last_response = None  # Store last response for on-demand TTS
 
     def load_config(self) -> Dict[str, Any]:
         """Load configuration from file."""
@@ -113,11 +114,11 @@ class MetaAICLI:
                 fb_password=fb_password,
                 proxy=proxy
             )
-            
+
             if args.verbose:
                 auth_status = "authenticated" if self.client.is_authenticated else "anonymous"
                 print(f"✓ Client initialized ({auth_status})", file=sys.stderr)
-                
+
         except Exception as e:
             print(f"Error initializing client: {e}", file=sys.stderr)
             sys.exit(1)
@@ -126,11 +127,11 @@ class MetaAICLI:
         """Format the response according to the specified format."""
         if format_type == "json":
             return json.dumps(response, indent=2, ensure_ascii=False)
-        
+
         elif format_type == "text":
             output = response.get("message", "")
             return output.strip()
-        
+
         elif format_type == "detailed":
             lines = []
             lines.append("=" * 50)
@@ -138,7 +139,7 @@ class MetaAICLI:
             lines.append("=" * 50)
             lines.append("")
             lines.append(response.get("message", "").strip())
-            
+
             if response.get("sources"):
                 lines.append("")
                 lines.append("SOURCES:")
@@ -146,7 +147,7 @@ class MetaAICLI:
                 for i, source in enumerate(response["sources"], 1):
                     lines.append(f"{i}. {source.get('title', 'Unknown')}")
                     lines.append(f"   {source.get('link', 'No link')}")
-            
+
             if response.get("media"):
                 lines.append("")
                 lines.append("MEDIA:")
@@ -155,11 +156,11 @@ class MetaAICLI:
                     lines.append(f"{i}. {media.get('type', 'Unknown')} - {media.get('url', 'No URL')}")
                     if media.get('prompt'):
                         lines.append(f"   Prompt: {media['prompt']}")
-            
+
             lines.append("")
             lines.append("=" * 50)
             return "\n".join(lines)
-        
+
         else:
             return str(response)
 
@@ -167,23 +168,23 @@ class MetaAICLI:
         """Handle the prompt command."""
         # Get message from args and/or stdin
         message_parts = []
-        
+
         # Check for piped input first
         piped_input = ""
         if not sys.stdin.isatty():
             piped_input = sys.stdin.read().strip()
             if piped_input:
                 message_parts.append(piped_input)
-        
+
         # Add the prompt argument if provided
         if args.message:
             message_parts.append(args.message)
-        
+
         # Combine the parts
         if not message_parts:
             print("Error: Message is required (provide as argument or pipe input)", file=sys.stderr)
             sys.exit(1)
-        
+
         # Join with a newline if we have both piped input and a prompt
         if len(message_parts) == 2:
             message = f"{message_parts[0]}\n\n{message_parts[1]}"
@@ -193,10 +194,10 @@ class MetaAICLI:
         try:
             # Default to streaming for text format
             should_stream = args.stream or (args.format == "text" and not args.no_stream)
-            
+
             # Start timing
             start_time = time.time()
-            
+
             if should_stream:
                 self.handle_streaming_prompt(args, message, start_time)
             else:
@@ -204,22 +205,22 @@ class MetaAICLI:
                     message=message,
                     new_conversation=args.new_conversation
                 )
-                
+
                 # Calculate timing
                 end_time = time.time()
                 elapsed_time = end_time - start_time
-                
+
                 output = self.format_output(response, args.format)
                 print(output)
-                
+
                 # Speak the response if TTS is enabled
                 if self.tts_enabled and args.format == "text":
                     self.speak_text(response.get("message", ""))
-                
+
                 # Show timing if requested
                 if args.timing:
                     print(f"\n⏱️  Response time: {elapsed_time:.2f} seconds", file=sys.stderr)
-                
+
         except MetaAIException as e:
             print(f"Meta AI Error: {e}", file=sys.stderr)
             sys.exit(1)
@@ -232,7 +233,7 @@ class MetaAICLI:
         try:
             first_chunk_time = None
             final_response = None
-            
+
             if args.format == "json":
                 # For JSON format, collect all chunks and output as array
                 chunks = []
@@ -246,7 +247,7 @@ class MetaAICLI:
                     chunks.append(chunk)
                     final_response = chunk
                 print(json.dumps(chunks, indent=2, ensure_ascii=False))
-            
+
             elif args.format == "text":
                 # For text format, show incremental updates
                 previous_text = ""
@@ -265,7 +266,7 @@ class MetaAICLI:
                         previous_text = current_text
                     final_response = chunk
                 print()  # Final newline
-            
+
             else:
                 # For detailed format, show final result
                 for chunk in self.client.prompt(
@@ -276,24 +277,24 @@ class MetaAICLI:
                     if first_chunk_time is None:
                         first_chunk_time = time.time()
                     final_response = chunk
-                
+
                 if final_response:
                     output = self.format_output(final_response, args.format)
                     print(output)
-            
+
             # Speak the final response if TTS is enabled
             if self.tts_enabled and final_response and args.format == "text":
                 self.speak_text(final_response.get("message", ""))
-            
+
             # Show timing if requested
             if args.timing and first_chunk_time is not None:
                 end_time = time.time()
                 total_time = end_time - start_time
                 first_chunk_time_elapsed = first_chunk_time - start_time
-                
+
                 print(f"\n⏱️  Time to first response: {first_chunk_time_elapsed:.2f}s", file=sys.stderr)
                 print(f"⏱️  Total response time: {total_time:.2f}s", file=sys.stderr)
-                    
+
         except KeyboardInterrupt:
             print("\nStreaming interrupted by user", file=sys.stderr)
             sys.exit(1)
@@ -303,7 +304,7 @@ class MetaAICLI:
         print("Meta AI Interactive Mode")
         print("Type 'help' for commands, 'quit' to exit")
         print("-" * 40)
-        
+
         if self.client.is_authenticated:
             print("✓ Authenticated with Facebook")
         else:
@@ -313,35 +314,39 @@ class MetaAICLI:
         while True:
             try:
                 user_input = input("meta-ai> ").strip()
-                
+
                 if not user_input:
                     continue
-                
+
                 if user_input.lower() in ['quit', 'exit', 'q']:
                     print("Goodbye!")
                     break
-                
+
                 elif user_input.lower() == 'help':
                     self.show_interactive_help()
                     continue
-                
+
                 elif user_input.lower() == 'new':
                     self.client.start_new_conversation()
                     print("✓ Started new conversation")
                     continue
-                
+
                 elif user_input.lower() == 'status':
                     self.show_status()
                     continue
-                
+
                 elif user_input.lower().startswith('tts'):
                     self.handle_tts_command(user_input)
                     continue
-                
+
+                elif user_input.lower() == 'speak':
+                    self.handle_speak_command()
+                    continue
+
                 # Regular prompt
                 should_stream = args.stream or (args.format == "text" and not args.no_stream)
                 start_time = time.time()
-                
+
                 if should_stream:
                     previous_text = ""
                     first_chunk_time = None
@@ -355,11 +360,13 @@ class MetaAICLI:
                                 print(new_part, end="", flush=True)
                             previous_text = current_text
                     print("\n")
-                    
-                    # Speak the response if TTS is enabled
-                    if self.tts_enabled and previous_text:
-                        self.speak_text(previous_text)
-                    
+
+                    # Store last response and speak if TTS is enabled
+                    if previous_text:
+                        self._last_response = previous_text
+                        if self.tts_enabled:
+                            self.speak_text(previous_text)
+
                     # Show timing for streaming in interactive mode
                     if args.timing and first_chunk_time is not None:
                         end_time = time.time()
@@ -371,19 +378,21 @@ class MetaAICLI:
                     response = self.client.prompt(user_input)
                     end_time = time.time()
                     elapsed_time = end_time - start_time
-                    
+
                     output = self.format_output(response, args.format)
                     print(output)
-                    
-                    # Speak the response if TTS is enabled
-                    if self.tts_enabled and args.format == "text":
-                        self.speak_text(response.get("message", ""))
-                    
+
+                    # Store last response and speak if TTS is enabled
+                    if args.format == "text":
+                        self._last_response = response.get("message", "")
+                        if self.tts_enabled:
+                            self.speak_text(self._last_response)
+
                     # Show timing for non-streaming in interactive mode
                     if args.timing:
                         print(f"⏱️  Response time: {elapsed_time:.2f} seconds", file=sys.stderr)
                     print()
-                
+
             except KeyboardInterrupt:
                 print("\nUse 'quit' to exit")
             except EOFError:
@@ -403,8 +412,9 @@ Interactive Mode Commands:
   tts on   - Enable TTS
   tts off  - Disable TTS
   tts voice <voice> - Set edge-tts voice (e.g., en-US-JennyNeural)
+  speak    - Speak the last response again
   quit     - Exit interactive mode
-  
+
 Any other input will be sent as a prompt to Meta AI.
         """
         print(help_text.strip())
@@ -412,7 +422,7 @@ Any other input will be sent as a prompt to Meta AI.
     def handle_tts_command(self, user_input: str) -> None:
         """Handle TTS-related commands in interactive mode."""
         parts = user_input.split()  # Don't convert to lowercase for voice names
-        
+
         if len(parts) == 1:  # Just "tts"
             # Toggle TTS
             if self.tts_enabled:
@@ -428,7 +438,7 @@ Any other input will be sent as a prompt to Meta AI.
                         print("✓ TTS enabled")
                     else:
                         print("✗ TTS could not be enabled")
-        
+
         elif len(parts) == 2:
             if parts[1].lower() == "on":
                 if self.tts_command or self.tts_method == "edge-tts":
@@ -440,23 +450,47 @@ Any other input will be sent as a prompt to Meta AI.
                         print("✓ TTS enabled")
                     else:
                         print("✗ TTS could not be enabled")
-            
+
             elif parts[1].lower() == "off":
                 self.tts_enabled = False
                 print("✓ TTS disabled")
-            
+
             else:
                 print("Usage: tts [on|off|voice <voice_name>]")
-        
+
         elif len(parts) == 3 and parts[1].lower() == "voice":
             if self.tts_method == "edge-tts":
                 self.edge_tts_voice = parts[2]
                 print(f"✓ TTS voice set to: {self.edge_tts_voice}")
             else:
                 print("Voice selection only available with edge-tts")
-        
+
         else:
             print("Usage: tts [on|off|voice <voice_name>]")
+
+    def handle_speak_command(self) -> None:
+        """Handle the speak command to replay last response."""
+        if not self._last_response:
+            print("No previous response to speak")
+            return
+
+        if not self.tts_enabled:
+            # Temporarily enable TTS for this command
+            temp_enabled = False
+            try:
+                import edge_tts
+                temp_enabled = True
+            except ImportError:
+                print("TTS not available. Install edge-tts with: pip install edge-tts pygame")
+                return
+
+            if temp_enabled:
+                print("🔊 Speaking last response...")
+                # Use edge-tts method directly without changing global state
+                self.speak_with_edge_tts(self.clean_text_for_tts(self._last_response))
+        else:
+            print("🔊 Speaking last response...")
+            self.speak_text(self._last_response)
 
     def setup_tts(self, tts_command: Optional[str] = None) -> None:
         """Set up TTS functionality."""
@@ -469,7 +503,7 @@ Any other input will be sent as a prompt to Meta AI.
             return
         except ImportError:
             pass
-        
+
         # Fall back to external commands
         if tts_command:
             self.tts_command = tts_command
@@ -481,16 +515,16 @@ Any other input will be sent as a prompt to Meta AI.
                 "say",     # macOS TTS
                 "spd-say", # Speech Dispatcher
             ]
-            
+
             for cmd in default_commands:
                 cmd_path = cmd.split()[0]
                 if cmd_path.startswith("~/"):
                     cmd_path = os.path.expanduser(cmd_path)
-                
+
                 if shutil.which(cmd_path) or os.path.exists(cmd_path):
                     self.tts_command = cmd
                     break
-        
+
         if self.tts_command:
             self.tts_method = "command"
             self.tts_enabled = True
@@ -503,18 +537,18 @@ Any other input will be sent as a prompt to Meta AI.
         """Convert text to speech using the configured TTS method."""
         if not self.tts_enabled:
             return
-        
+
         try:
             # Clean the text for TTS (remove markdown, etc.)
             clean_text = self.clean_text_for_tts(text)
             if not clean_text.strip():
                 return
-            
+
             if self.tts_method == "edge-tts":
                 self.speak_with_edge_tts(clean_text)
             elif self.tts_method == "command" and self.tts_command:
                 self.speak_with_command(clean_text)
-                
+
         except Exception as e:
             print(f"TTS Error: {e}", file=sys.stderr)
 
@@ -525,10 +559,10 @@ Any other input will be sent as a prompt to Meta AI.
                 try:
                     import pygame
                     import os
-                    
+
                     # Set audio driver preferences
                     os.environ['SDL_AUDIODRIVER'] = 'pulse,alsa,oss'
-                    
+
                     # Initialize mixer with conservative settings
                     pygame.mixer.pre_init(
                         frequency=22050,
@@ -552,50 +586,50 @@ Any other input will be sent as a prompt to Meta AI.
                 import edge_tts
                 import pygame
                 import tempfile
-                
+
                 # Create a temporary file for the audio
                 with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as temp_file:
                     temp_path = temp_file.name
-                
+
                 # Generate speech asynchronously
                 async def generate_speech():
                     communicate = edge_tts.Communicate(text, self.edge_tts_voice)
                     await communicate.save(temp_path)
-                
+
                 # Run the async function
                 asyncio.run(generate_speech())
-                
+
                 # Initialize mixer if needed (thread-safe)
                 if not self._init_pygame_mixer():
                     return
-                
+
                 # Use lock to prevent concurrent audio operations
                 with self._mixer_lock:
                     try:
                         # Stop any currently playing audio
                         pygame.mixer.music.stop()
-                        
+
                         # Load and play the new audio
                         pygame.mixer.music.load(temp_path)
                         pygame.mixer.music.play()
-                        
+
                     except Exception as e:
                         print(f"TTS Error: Failed to play audio: {e}", file=sys.stderr)
                         return
-                
+
                 # Wait for playback to finish (outside the lock so other operations can proceed)
                 timeout_counter = 0
                 max_timeout = 300  # 30 seconds max
-                
+
                 while pygame.mixer.music.get_busy() and timeout_counter < max_timeout:
                     pygame.time.wait(100)
                     timeout_counter += 1
-                
+
                 # Stop if still playing (timeout protection)
                 if pygame.mixer.music.get_busy():
                     with self._mixer_lock:
                         pygame.mixer.music.stop()
-                
+
             except ImportError as e:
                 missing_pkg = "edge-tts" if "edge_tts" in str(e) else "pygame"
                 print(f"TTS Error: {missing_pkg} not installed. Install with: pip install {missing_pkg}", file=sys.stderr)
@@ -608,7 +642,7 @@ Any other input will be sent as a prompt to Meta AI.
                         os.unlink(temp_path)
                     except:
                         pass  # Ignore cleanup errors
-        
+
         # Run TTS in a background thread so it doesn't block the main thread
         try:
             tts_thread = threading.Thread(target=_speak_in_background, daemon=True)
@@ -624,7 +658,7 @@ Any other input will be sent as a prompt to Meta AI.
             # Expand the first part (command path) if it contains ~
             if cmd_parts[0].startswith("~/"):
                 cmd_parts[0] = os.path.expanduser(cmd_parts[0])
-            
+
             process = subprocess.Popen(
                 cmd_parts,
                 stdin=subprocess.PIPE,
@@ -639,19 +673,19 @@ Any other input will be sent as a prompt to Meta AI.
     def clean_text_for_tts(self, text: str) -> str:
         """Clean text for better TTS pronunciation."""
         import re
-        
+
         # Remove markdown formatting
         text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)  # Bold
         text = re.sub(r'\*(.*?)\*', r'\1', text)      # Italic
         text = re.sub(r'`(.*?)`', r'\1', text)        # Code
         text = re.sub(r'#{1,6}\s*(.*)', r'\1', text)  # Headers
-        
+
         # Remove URLs (replace with "link")
         text = re.sub(r'https?://[^\s]+', 'link', text)
-        
+
         # Clean up extra whitespace
         text = re.sub(r'\s+', ' ', text)
-        
+
         return text.strip()
 
     def show_status(self) -> None:
@@ -681,14 +715,14 @@ Any other input will be sent as a prompt to Meta AI.
                 print(json.dumps(display_config, indent=2))
             else:
                 print("No configuration found")
-        
+
         elif args.config_action == "clear":
             if self.config_file.exists():
                 self.config_file.unlink()
                 print("Configuration cleared")
             else:
                 print("No configuration to clear")
-        
+
         elif args.config_action == "path":
             print(f"Configuration file: {self.config_file}")
 
@@ -716,20 +750,20 @@ Examples:
 
         # Global options
         parser.add_argument(
-            "--email", 
+            "--email",
             help="Facebook email for authentication"
         )
         parser.add_argument(
-            "--password", 
+            "--password",
             help="Facebook password for authentication"
         )
         parser.add_argument(
-            "--proxy", 
+            "--proxy",
             help="Proxy URL (e.g., http://proxy:8080)"
         )
         parser.add_argument(
-            "--verbose", "-v", 
-            action="store_true", 
+            "--verbose", "-v",
+            action="store_true",
             help="Verbose output"
         )
         # Note: format is added to individual subcommands that need it
@@ -739,113 +773,113 @@ Examples:
 
         # Prompt command
         prompt_parser = subparsers.add_parser(
-            "prompt", 
+            "prompt",
             help="Send a prompt to Meta AI"
         )
         prompt_parser.add_argument(
-            "message", 
+            "message",
             nargs="?",
             help="The message/prompt to send to Meta AI (can be combined with piped input)"
         )
         prompt_parser.add_argument(
-            "--stream", 
-            action="store_true", 
+            "--stream",
+            action="store_true",
             help="Force streaming mode (text format streams by default)"
         )
         prompt_parser.add_argument(
-            "--no-stream", 
-            action="store_true", 
+            "--no-stream",
+            action="store_true",
             help="Disable streaming mode"
         )
         prompt_parser.add_argument(
-            "--new-conversation", 
-            action="store_true", 
+            "--new-conversation",
+            action="store_true",
             help="Start a new conversation"
         )
         prompt_parser.add_argument(
-            "--auth", 
-            action="store_true", 
+            "--auth",
+            action="store_true",
             help="Prompt for Facebook authentication"
         )
         prompt_parser.add_argument(
-            "--format", 
-            choices=["text", "json", "detailed"], 
+            "--format",
+            choices=["text", "json", "detailed"],
             default="text",
             help="Output format (default: text)"
         )
         prompt_parser.add_argument(
-            "--timing", 
-            action="store_true", 
+            "--timing",
+            action="store_true",
             help="Show response time information"
         )
         prompt_parser.add_argument(
-            "--tts", 
-            action="store_true", 
+            "--tts",
+            action="store_true",
             help="Enable text-to-speech for the response"
         )
         prompt_parser.add_argument(
-            "--tts-command", 
+            "--tts-command",
             help="Custom TTS command (default: auto-detect)"
         )
         prompt_parser.add_argument(
-            "--tts-voice", 
+            "--tts-voice",
             default="en-US-AriaNeural",
             help="Voice for edge-tts (default: en-US-AriaNeural)"
         )
 
         # Interactive command
         interactive_parser = subparsers.add_parser(
-            "interactive", 
+            "interactive",
             help="Start interactive mode"
         )
         interactive_parser.add_argument(
-            "--stream", 
-            action="store_true", 
+            "--stream",
+            action="store_true",
             help="Force streaming mode for responses (text format streams by default)"
         )
         interactive_parser.add_argument(
-            "--no-stream", 
-            action="store_true", 
+            "--no-stream",
+            action="store_true",
             help="Disable streaming mode for responses"
         )
         interactive_parser.add_argument(
-            "--auth", 
-            action="store_true", 
+            "--auth",
+            action="store_true",
             help="Prompt for Facebook authentication"
         )
         interactive_parser.add_argument(
-            "--format", 
-            choices=["text", "json", "detailed"], 
+            "--format",
+            choices=["text", "json", "detailed"],
             default="text",
             help="Output format for responses (default: text)"
         )
         interactive_parser.add_argument(
-            "--timing", 
-            action="store_true", 
+            "--timing",
+            action="store_true",
             help="Show response time information"
         )
         interactive_parser.add_argument(
-            "--tts", 
-            action="store_true", 
+            "--tts",
+            action="store_true",
             help="Enable text-to-speech for responses"
         )
         interactive_parser.add_argument(
-            "--tts-command", 
+            "--tts-command",
             help="Custom TTS command (default: auto-detect)"
         )
         interactive_parser.add_argument(
-            "--tts-voice", 
+            "--tts-voice",
             default="en-US-AriaNeural",
             help="Voice for edge-tts (default: en-US-AriaNeural)"
         )
 
         # Config command
         config_parser = subparsers.add_parser(
-            "config", 
+            "config",
             help="Manage configuration"
         )
         config_parser.add_argument(
-            "config_action", 
+            "config_action",
             choices=["show", "clear", "path"],
             help="Configuration action"
         )
