@@ -45,6 +45,8 @@ class MetaAICLI:
         self.tts_command = None
         self.tts_method = "command"  # "command" or "edge-tts"
         self.edge_tts_voice = "en-US-AriaNeural"  # Default voice
+        self._mixer_lock = threading.Lock()
+        self._mixer_initialized = False
 
     def load_config(self) -> Dict[str, Any]:
         """Load configuration from file."""
@@ -516,16 +518,40 @@ Any other input will be sent as a prompt to Meta AI.
         except Exception as e:
             print(f"TTS Error: {e}", file=sys.stderr)
 
+    def _init_pygame_mixer(self):
+        """Initialize pygame mixer once, thread-safely."""
+        with self._mixer_lock:
+            if not self._mixer_initialized:
+                try:
+                    import pygame
+                    import os
+                    
+                    # Set audio driver preferences
+                    os.environ['SDL_AUDIODRIVER'] = 'pulse,alsa,oss'
+                    
+                    # Initialize mixer with conservative settings
+                    pygame.mixer.pre_init(
+                        frequency=22050,
+                        size=-16,
+                        channels=2,
+                        buffer=1024
+                    )
+                    pygame.mixer.init()
+                    self._mixer_initialized = True
+                    return True
+                except Exception as e:
+                    print(f"TTS Error: Failed to initialize pygame mixer: {e}", file=sys.stderr)
+                    return False
+            return True
+
     def speak_with_edge_tts(self, text: str) -> None:
         """Speak text using edge-tts with pygame in a background thread."""
         def _speak_in_background():
             temp_path = None
-            mixer_initialized = False
             try:
                 import edge_tts
                 import pygame
                 import tempfile
-                import os
                 
                 # Create a temporary file for the audio
                 with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as temp_file:
@@ -539,34 +565,36 @@ Any other input will be sent as a prompt to Meta AI.
                 # Run the async function
                 asyncio.run(generate_speech())
                 
-                # Initialize pygame mixer safely for threading
-                os.environ['SDL_AUDIODRIVER'] = 'pulse,alsa,oss'  # Prefer stable drivers
+                # Initialize mixer if needed (thread-safe)
+                if not self._init_pygame_mixer():
+                    return
                 
-                # Initialize mixer with conservative settings
-                pygame.mixer.pre_init(
-                    frequency=22050,    # Lower frequency for stability
-                    size=-16,           # 16-bit signed
-                    channels=2,         # Stereo
-                    buffer=1024         # Larger buffer for stability
-                )
-                pygame.mixer.init()
-                mixer_initialized = True
+                # Use lock to prevent concurrent audio operations
+                with self._mixer_lock:
+                    try:
+                        # Stop any currently playing audio
+                        pygame.mixer.music.stop()
+                        
+                        # Load and play the new audio
+                        pygame.mixer.music.load(temp_path)
+                        pygame.mixer.music.play()
+                        
+                    except Exception as e:
+                        print(f"TTS Error: Failed to play audio: {e}", file=sys.stderr)
+                        return
                 
-                # Load and play the audio
-                pygame.mixer.music.load(temp_path)
-                pygame.mixer.music.play()
-                
-                # Wait for playback to finish with timeout protection
+                # Wait for playback to finish (outside the lock so other operations can proceed)
                 timeout_counter = 0
-                max_timeout = 300  # 30 seconds max (300 * 0.1s)
+                max_timeout = 300  # 30 seconds max
                 
                 while pygame.mixer.music.get_busy() and timeout_counter < max_timeout:
                     pygame.time.wait(100)
                     timeout_counter += 1
                 
-                # Stop music if still playing (timeout protection)
+                # Stop if still playing (timeout protection)
                 if pygame.mixer.music.get_busy():
-                    pygame.mixer.music.stop()
+                    with self._mixer_lock:
+                        pygame.mixer.music.stop()
                 
             except ImportError as e:
                 missing_pkg = "edge-tts" if "edge_tts" in str(e) else "pygame"
@@ -574,14 +602,6 @@ Any other input will be sent as a prompt to Meta AI.
             except Exception as e:
                 print(f"Edge-TTS Error: {e}", file=sys.stderr)
             finally:
-                # Safe cleanup
-                try:
-                    if mixer_initialized:
-                        pygame.mixer.music.stop()
-                        pygame.mixer.quit()
-                except:
-                    pass  # Ignore cleanup errors
-                
                 # Clean up temp file
                 if temp_path and os.path.exists(temp_path):
                     try:
