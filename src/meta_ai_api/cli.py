@@ -1,3 +1,4 @@
+import os; os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "1"
 #!/usr/bin/env python3
 """
 Command Line Interface for Meta AI API.
