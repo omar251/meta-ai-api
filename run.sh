@@ -11,4 +11,4 @@ fi
 PROMPT="$1"
 
 # Execute the command with the provided prompt
-meta-ai prompt "$PROMPT" --format text | ~/Dev/python/tts/.venv/bin/tts -t -
+meta-ai prompt "$PROMPT" --format text | tee /dev/tty | ~/Dev/python/tts/.venv/bin/tts -t -

@@ -38,6 +38,12 @@ meta-ai prompt "What is 2+2?" --format json
 
 # Stream response in real-time
 meta-ai prompt "Tell me a story" --stream
+
+# Enable text-to-speech for responses
+meta-ai prompt "What is artificial intelligence?" --tts
+
+# Use specific voice for TTS
+meta-ai prompt "Hello world" --tts --tts-voice "en-US-JennyNeural"
 ```
 
 **From source (development):**
@@ -116,6 +122,10 @@ meta-ai interactive [options]
 - `new` - Start a new conversation
 - `status` - Show client status
 - `quit` or `exit` - Exit interactive mode
+- `tts` - Toggle text-to-speech on/off
+- `tts on` - Enable text-to-speech
+- `tts off` - Disable text-to-speech
+- `tts voice <voice>` - Set TTS voice (e.g., en-US-JennyNeural)
 
 **Example:**
 ```bash
@@ -237,6 +247,12 @@ meta-ai prompt "Tell me a story" --stream
 
 # Use streaming in interactive mode
 meta-ai interactive --stream
+
+# Enable TTS in interactive mode
+meta-ai interactive --tts
+
+# Interactive mode with specific TTS voice
+meta-ai interactive --tts --tts-voice "en-US-AriaNeural"
 ```
 
 **Streaming Behavior:**
