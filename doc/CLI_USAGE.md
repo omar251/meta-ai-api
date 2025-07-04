@@ -1,6 +1,6 @@
 # Meta AI CLI Tool Documentation
 
-The Meta AI CLI tool provides a comprehensive command-line interface for interacting with Meta AI. It supports both one-off prompts and interactive sessions, with various output formats and authentication options.
+The Meta AI CLI tool provides a comprehensive command-line interface for interacting with Meta AI. It supports both one-off prompts and interactive sessions, with various output formats, authentication options, intelligent text-to-speech, and a colorful interface.
 
 ## Installation
 
@@ -9,6 +9,41 @@ After installing the package, the CLI tool is available as `meta-ai`:
 ```bash
 pip install meta-ai-api
 meta-ai --help
+```
+
+### Enhanced Features Installation
+
+For the full experience with TTS and colorful interface:
+
+```bash
+pip install edge-tts pygame googletrans==4.0.0rc1 colorama
+
+### Feature-Specific Dependencies
+
+**Core CLI**: No additional dependencies
+```bash
+pip install meta-ai-api
+```
+
+**Text-to-Speech**: Requires edge-tts and audio libraries
+```bash
+pip install edge-tts pygame
+```
+
+**Language Detection**: Requires Google Translate
+```bash
+pip install googletrans==4.0.0rc1
+```
+
+**Colorful Interface**: Requires colorama
+```bash
+pip install colorama
+```
+
+**Complete Installation**: All features
+```bash
+pip install meta-ai-api edge-tts pygame googletrans==4.0.0rc1 colorama
+```
 ```
 
 Or run directly from source:
@@ -204,14 +239,14 @@ meta-ai prompt "What is AI?" --format detailed
 # ==================================================
 # META AI RESPONSE
 # ==================================================
-# 
+#
 # Artificial Intelligence (AI) refers to...
-# 
+#
 # SOURCES:
 # --------------------
 # 1. Wikipedia - Artificial Intelligence
 #    https://en.wikipedia.org/wiki/Artificial_intelligence
-# 
+#
 # ==================================================
 ```
 
@@ -251,8 +286,84 @@ meta-ai interactive --stream
 # Enable TTS in interactive mode
 meta-ai interactive --tts
 
+## Advanced Features
+
+### Smart TTS Workflow
+1. **Language Detection**: Automatically detects the language of AI responses
+2. **Voice Caching**: Downloads and caches all available voices on first use
+3. **Random Selection**: Picks a random voice from available voices for that language
+4. **Neural Priority**: Prefers high-quality Neural voices when available
+5. **Background Playback**: Audio plays in background without blocking new prompts
+
+### Interactive Commands
+```bash
+meta-ai> help          # Show colored help menu
+meta-ai> status        # Display colorful status information
+meta-ai> tts           # Toggle TTS on/off
+meta-ai> speak         # Replay last response with TTS
+meta-ai> new           # Start fresh conversation
+meta-ai> quit          # Exit with style
+```
+
+### Multi-Language Example Session
+```bash
+meta-ai interactive --tts
+🤖 Meta AI Interactive Mode
+✅ TTS enabled with edge-tts
+
+meta-ai> Hello, how are you?
+🎭 Using Microsoft Aria Online for en-US
+[English response with English voice]
+
+meta-ai> Bonjour, comment allez-vous?
+🎭 Using Microsoft Denise Online for fr-FR
+[French response with French voice]
+
+meta-ai> speak
+🎵 Speaking last response...
+[Replays the French response]
+```
+
 # Interactive mode with specific TTS voice
 meta-ai interactive --tts --tts-voice "en-US-AriaNeural"
+
+## Advanced Features
+
+### Smart TTS Workflow
+1. **Language Detection**: Automatically detects the language of AI responses
+2. **Voice Caching**: Downloads and caches all available voices on first use
+3. **Random Selection**: Picks a random voice from available voices for that language
+4. **Neural Priority**: Prefers high-quality Neural voices when available
+5. **Background Playback**: Audio plays in background without blocking new prompts
+
+### Interactive Commands
+```bash
+meta-ai> help          # Show colored help menu
+meta-ai> status        # Display colorful status information
+meta-ai> tts           # Toggle TTS on/off
+meta-ai> speak         # Replay last response with TTS
+meta-ai> new           # Start fresh conversation
+meta-ai> quit          # Exit with style
+```
+
+### Multi-Language Example Session
+```bash
+meta-ai interactive --tts
+🤖 Meta AI Interactive Mode
+✅ TTS enabled with edge-tts
+
+meta-ai> Hello, how are you?
+🎭 Using Microsoft Aria Online for en-US
+[English response with English voice]
+
+meta-ai> Bonjour, comment allez-vous?
+🎭 Using Microsoft Denise Online for fr-FR
+[French response with French voice]
+
+meta-ai> speak
+🎵 Speaking last response...
+[Replays the French response]
+```
 ```
 
 **Streaming Behavior:**
@@ -442,7 +553,7 @@ def ask_ai(question):
     result = subprocess.run([
         'meta-ai', 'prompt', question, '--format', 'json'
     ], capture_output=True, text=True)
-    
+
     if result.returncode == 0:
         response = json.loads(result.stdout)
         return response['message']
@@ -454,4 +565,66 @@ answer = ask_ai("What is machine learning?")
 print(answer)
 ```
 
-The Meta AI CLI tool provides a powerful and flexible way to interact with Meta AI from the command line, suitable for both interactive use and automation scripts.
+The Meta AI CLI tool provides a powerful, feature-rich way to interact with Meta AI from the command line. With intelligent text-to-speech, automatic language detection, colorful interface, and comprehensive interactive features, it offers an enhanced experience suitable for both casual use and advanced automation scripts.
+
+### Key Highlights
+- 🎤 **Smart TTS**: Automatic language detection with random voice selection
+- 🌈 **Colorful UI**: Modern, visually appealing interface
+- 🗣️ **Multi-Language**: Support for 25+ languages with native voices
+- ⚡ **Fast Performance**: Voice caching and background audio processing
+- 🎭 **Voice Variety**: Different voice each time for engaging conversations
+- 💬 **Interactive**: Rich command set with on-demand features
+- 🔧 **Flexible**: Works with or without enhanced features
+
+## Troubleshooting
+
+### TTS Issues
+
+**No audio playback**:
+```bash
+# Install audio dependencies
+sudo apt-get install python3-pygame  # Ubuntu/Debian
+brew install pygame                   # macOS
+```
+
+**Language detection errors**:
+```bash
+# Install specific googletrans version
+pip install googletrans==4.0.0rc1
+```
+
+**Colors not showing**:
+```bash
+# Install colorama
+pip install colorama
+# Or disable colors by setting environment variable
+export NO_COLOR=1
+```
+
+### Common Solutions
+
+1. **Permission errors**: Run with appropriate permissions
+2. **Network issues**: Check internet connection for language detection
+3. **Audio device**: Ensure audio output device is available
+4. **Terminal support**: Use a modern terminal that supports colors
+
+### Performance Tips
+
+- **Voice caching**: First TTS use downloads ~400 voices (one-time)
+- **Language detection**: Requires internet connection
+- **Background audio**: New prompts interrupt previous audio
+- **Memory usage**: Voice cache uses ~50MB RAM
+
+## Feature Matrix
+
+| Feature | Basic | With TTS | With Colors | Full |
+|---------|-------|----------|-------------|------|
+| Text prompts | ✅ | ✅ | ✅ | ✅ |
+| Interactive mode | ✅ | ✅ | ✅ | ✅ |
+| Streaming | ✅ | ✅ | ✅ | ✅ |
+| Authentication | ✅ | ✅ | ✅ | ✅ |
+| Text-to-speech | ❌ | ✅ | ❌ | ✅ |
+| Language detection | ❌ | ✅ | ❌ | ✅ |
+| Random voices | ❌ | ✅ | ❌ | ✅ |
+| Colorful interface | ❌ | ❌ | ✅ | ✅ |
+| On-demand TTS | ❌ | ✅ | ❌ | ✅ |
