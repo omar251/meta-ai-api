@@ -565,9 +565,31 @@ class MetaAICLI:
                 try:
                     import pygame
                     import os
+                    import platform
 
-                    # Set audio driver preferences
-                    os.environ['SDL_AUDIODRIVER'] = 'pulse,alsa,oss'
+                    # Set audio driver preferences based on OS
+                    system = platform.system().lower()
+                    if system == "windows":
+                        os.environ['SDL_AUDIODRIVER'] = 'directsound'
+                    elif system == "darwin":
+                        os.environ['SDL_AUDIODRIVER'] = 'coreaudio'
+                    else:
+                        # Try common Linux drivers in order
+                        for drv in ['pulse', 'alsa', 'oss']:
+                            os.environ['SDL_AUDIODRIVER'] = drv
+                            try:
+                                pygame.mixer.pre_init(
+                                    frequency=22050,
+                                    size=-16,
+                                    channels=2,
+                                    buffer=1024
+                                )
+                                pygame.mixer.init()
+                                self._mixer_initialized = True
+                                return True
+                            except Exception:
+                                continue
+                        raise RuntimeError("No suitable audio driver found for pygame on this system.")
 
                     # Initialize mixer with conservative settings
                     pygame.mixer.pre_init(
@@ -581,7 +603,7 @@ class MetaAICLI:
                     return True
                 except Exception as e:
                     print(f"TTS Error: Failed to initialize pygame mixer: {e}", file=sys.stderr)
-                    return False
+                    return
             return True
 
     def speak_with_edge_tts(self, text: str, voice: str = None) -> None:
